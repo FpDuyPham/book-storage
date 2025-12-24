@@ -8,9 +8,38 @@ export const storageService = {
         try {
             const root = await this.getDirectory();
             const fileHandle = await root.getFileHandle(`${id}.epub`, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(data);
-            await writable.close();
+
+            // Check if createWritable is available (PC, Android Chrome)
+            if ((fileHandle as any).createWritable) {
+                const writable = await (fileHandle as any).createWritable();
+                await writable.write(data);
+                await writable.close();
+            } else {
+                // Fallback for Safari/iOS: Use Web Worker + createSyncAccessHandle
+                await new Promise<void>((resolve, reject) => {
+                    const worker = new Worker(new URL('./opfs-writer.worker.ts', import.meta.url), { type: 'module' });
+
+                    worker.onmessage = (e) => {
+                        if (e.data.success) {
+                            resolve();
+                        } else {
+                            reject(new Error(e.data.error));
+                        }
+                        worker.terminate();
+                    };
+
+                    worker.onerror = (e) => {
+                        reject(new Error(`Worker error: ${e.message}`));
+                        worker.terminate();
+                    };
+
+                    // Send data to worker
+                    worker.postMessage({
+                        fileHandle,
+                        arrayBuffer: data
+                    });
+                });
+            }
         } catch (error) {
             console.error('Error saving book data to OPFS:', error);
             throw error;
