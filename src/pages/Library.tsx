@@ -37,6 +37,38 @@ export default function Library() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [isRefining, setIsRefining] = useState(false);
+
+    // Auto-fix metadata for existing books (if totalChapters is 0)
+    React.useEffect(() => {
+        const fixMetadata = async () => {
+            if (!books || isRefining) return;
+            const booksToFix = books.filter(b => b.totalChapters === 0 || b.totalChapters === undefined);
+            if (booksToFix.length === 0) return;
+
+            setIsRefining(true);
+            console.log(`Refining metadata for ${booksToFix.length} books...`);
+
+            for (const book of booksToFix) {
+                try {
+                    const data = await storageService.getBookData(book.id);
+                    if (data) {
+                        const { totalChapters } = await parseEpub(data);
+                        if (totalChapters > 0) {
+                            await db.books.update(book.id, { totalChapters });
+                        }
+                    }
+                } catch (e) {
+                    console.error(`Failed to refine metadata for ${book.title}`, e);
+                }
+            }
+            setIsRefining(false);
+        };
+
+        // Small timeout to not block initial render
+        const timer = setTimeout(fixMetadata, 1000);
+        return () => clearTimeout(timer);
+    }, [books]);
 
     // Toolbar State
     const [searchQuery, setSearchQuery] = useState('');
@@ -100,15 +132,16 @@ export default function Library() {
         setIsImporting(true);
         let successCount = 0;
         let failCount = 0;
+        let lastError = "";
 
-        try {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            try {
                 // Relaxed type check: Allow if name ends with .epub OR type is correct
                 // Safari sometimes reports empty type for EPUBs
                 if (file.type !== 'application/epub+zip' && !file.name.toLowerCase().endsWith('.epub')) {
                     console.warn(`[Import] Skipped file: ${file.name} (Type: ${file.type})`);
-                    continue;
+                    throw new Error(`Invalid file type: ${file.type || 'Unknown'}`);
                 }
 
                 const arrayBuffer = await file.arrayBuffer();
@@ -130,22 +163,32 @@ export default function Library() {
                     addedAt: Date.now(),
                     status: 'To Read',
                     genre: 'General',
-                    isFavorite: false
+                    isFavorite: false,
+                    totalChapters: metadata.totalChapters
                 });
                 successCount++;
+            } catch (error: any) {
+                console.error(`Import failed for ${file.name}`, error);
+                failCount++;
+                const msg = error instanceof Error ? error.message :
+                    typeof error === 'string' ? error :
+                        JSON.stringify(error);
+                lastError = msg;
             }
-        } catch (error) {
-            console.error("Import failed", error);
-            failCount++;
-        } finally {
-            setIsImporting(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
 
-            if (successCount > 0) {
-                toast.success(`Successfully added ${successCount} book${successCount > 1 ? 's' : ''}`);
-            }
-            if (failCount > 0) {
-                toast.error(`Failed to import ${failCount} file${failCount > 1 ? 's' : ''}`);
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+
+        if (successCount > 0) {
+            toast.success(`Successfully added ${successCount} book${successCount > 1 ? 's' : ''}`);
+        }
+
+        if (failCount > 0) {
+            if (failCount === 1) {
+                toast.error(`Import Failed: ${lastError}`);
+            } else {
+                toast.error(`Failed to import ${failCount} files. Check console for details.`);
             }
         }
     };

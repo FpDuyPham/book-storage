@@ -200,6 +200,12 @@ export function BookCard({ book, onDelete, onToggleFavorite, onEdit }: BookCardP
                                 <p className="text-sm text-muted-foreground truncate" title={book.author}>
                                     {book.author || "Unknown Author"}
                                 </p>
+                                {book.totalChapters !== undefined && book.totalChapters > 0 && (
+                                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                        <BookIcon size={12} className="opacity-70" />
+                                        {book.totalChapters} chapters
+                                    </p>
+                                )}
                             </div>
 
                             <div className="mt-auto space-y-3">

@@ -14,6 +14,7 @@ interface Book {
     genre: string;
     isFavorite: boolean;
     lastReadAt?: number;
+    totalChapters?: number;
 }
 
 const db = new Dexie('StoryReaderDB') as Dexie & {
@@ -32,6 +33,14 @@ db.version(2).stores({
         book.genre = 'General';
         book.isFavorite = false;
         book.lastReadAt = undefined;
+    });
+});
+
+db.version(3).stores({
+    books: 'id, title, author, addedAt, status, genre, isFavorite, lastReadAt, totalChapters'
+}).upgrade(tx => {
+    return tx.table('books').toCollection().modify(book => {
+        book.totalChapters = 0;
     });
 });
 
