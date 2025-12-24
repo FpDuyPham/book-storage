@@ -104,7 +104,12 @@ export default function Library() {
         try {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
-                if (file.type !== 'application/epub+zip' && !file.name.endsWith('.epub')) continue;
+                // Relaxed type check: Allow if name ends with .epub OR type is correct
+                // Safari sometimes reports empty type for EPUBs
+                if (file.type !== 'application/epub+zip' && !file.name.toLowerCase().endsWith('.epub')) {
+                    console.warn(`[Import] Skipped file: ${file.name} (Type: ${file.type})`);
+                    continue;
+                }
 
                 const arrayBuffer = await file.arrayBuffer();
                 const metadata = await parseEpub(arrayBuffer);
@@ -200,7 +205,7 @@ export default function Library() {
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileUpload}
-                accept=".epub"
+                accept=".epub,application/epub+zip"
                 multiple
                 className="hidden"
             />

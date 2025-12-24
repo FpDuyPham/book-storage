@@ -296,19 +296,31 @@ export function useTTS(rendition: Rendition | null) {
         };
     }, []);
 
-    // Pause when page visibility changes
+    // Media Session Integration
     useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.hidden && state.isPlaying && !state.isPaused) {
-                pause();
-            }
-        };
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: 'Audiobook',
+                artist: 'DocTruyen Reader',
+            });
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, [state.isPlaying, state.isPaused, pause]);
+            navigator.mediaSession.setActionHandler('play', () => {
+                if (state.isPaused) resume();
+            });
+            navigator.mediaSession.setActionHandler('pause', () => {
+                pause();
+            });
+            navigator.mediaSession.setActionHandler('stop', () => {
+                stop();
+            });
+        }
+    }, [resume, pause, stop, state.isPaused]);
+
+    useEffect(() => {
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = (state.isPlaying && !state.isPaused) ? 'playing' : 'paused';
+        }
+    }, [state.isPlaying, state.isPaused]);
 
     // Auto-stop TTS when page navigation occurs (FIX: Navigation Queue Leak)
     useEffect(() => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, Square, Volume2, Mic, ChevronDown, Headphones } from 'lucide-react';
+import { Play, Pause, Square, Volume2, Mic, ChevronDown, Headphones, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
@@ -12,6 +12,7 @@ import {
     SelectValue,
 } from './ui/select';
 import { TTSSettings, TTSState, TTSControls } from '../types/tts';
+import { TTSHelpDialog } from './TTSHelpDialog';
 
 interface TTSControlsProps {
     settings: TTSSettings;
@@ -23,6 +24,7 @@ interface TTSControlsProps {
 export function TTSControlsPanel({ settings, state, controls, availableVoices }: TTSControlsProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const [isMinimized, setIsMinimized] = React.useState(false);
+    const [showHelp, setShowHelp] = React.useState(false);
 
     const handlePlayPause = () => {
         if (state.isPlaying) {
@@ -128,6 +130,16 @@ export function TTSControlsPanel({ settings, state, controls, availableVoices }:
                             {/* Right: Expand/Collapse & Voice */}
                             <div className="flex items-center gap-2">
                                 <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => setShowHelp(true)}
+                                    className="text-gray-400 hover:text-white hover:bg-white/10 h-8 w-8"
+                                    title="Voice Setup Guide"
+                                >
+                                    <HelpCircle className="h-5 w-5" />
+                                </Button>
+
+                                <Button
                                     size="sm"
                                     variant="ghost"
                                     onClick={() => setIsExpanded(!isExpanded)}
@@ -220,6 +232,7 @@ export function TTSControlsPanel({ settings, state, controls, availableVoices }:
                             )}
                         </AnimatePresence>
                     </div>
+                    <TTSHelpDialog open={showHelp} onOpenChange={setShowHelp} />
                 </motion.div>
             ) : (
                 <motion.div
