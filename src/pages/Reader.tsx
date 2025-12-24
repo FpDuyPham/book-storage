@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { db } from '../services/db';
+import { storageService } from '../services/storage';
 import ePub, { Book, Rendition } from 'epubjs';
 import { ArrowLeft, Settings as SettingsIcon } from 'lucide-react';
 import { ReaderControls } from '../components/ReaderControls';
@@ -9,8 +10,7 @@ import { TTSControlsPanel } from '../components/TTSControls';
 import { Sheet } from '../components/ui/sheet';
 import { Button } from '../components/ui/button';
 import { useTTS } from '../hooks/useTTS';
-
-import { loadSettings, saveSettings, ReaderSettings } from '../lib/settings';
+import { useReaderStore, ReaderSettings } from '../hooks/useReaderStore';
 
 export default function Reader() {
     const { id } = useParams<{ id: string }>();
@@ -25,14 +25,11 @@ export default function Reader() {
     const [currentChapter, setCurrentChapter] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
 
+    // Use Global Store
+    const settings = useReaderStore();
+
     // Initialize TTS
     const tts = useTTS(renditionRef.current);
-    const [settings, setSettings] = useState<ReaderSettings>(loadSettings());
-
-    // Save settings on update
-    useEffect(() => {
-        saveSettings(settings);
-    }, [settings]);
 
     const initBook = async (dbBook: any, mode: 'scrolled' | 'paginated') => {
         try {
@@ -53,7 +50,19 @@ export default function Reader() {
             // Initialize ePub if fresh
             if (!bookRef.current) {
                 console.log('[Reader] Creating new ePub instance');
-                bookRef.current = ePub(dbBook.data);
+
+                let bookData = dbBook.data;
+                if (!bookData) {
+                    try {
+                        console.log('[Reader] Fetching book data from OPFS...');
+                        bookData = await storageService.getBookData(dbBook.id);
+                    } catch (err) {
+                        console.error('[Reader] Failed to load book data from storage:', err);
+                        throw new Error('Book content not found.');
+                    }
+                }
+
+                bookRef.current = ePub(bookData);
 
                 // Load navigation
                 console.log('[Reader] Loading navigation...');
@@ -65,13 +74,14 @@ export default function Reader() {
             const book = bookRef.current;
 
             let flow = mode === 'scrolled' ? 'scrolled-doc' : 'paginated';
-            console.log('[Reader] Rendering with flow:', flow);
+            const manager = mode === 'scrolled' ? 'continuous' : 'default';
+            console.log('[Reader] Rendering with flow:', flow, 'manager:', manager);
 
             const rendition = book.renderTo(viewerRef.current, {
                 width: '100%',
                 height: '100%',
                 flow: flow,
-                manager: 'default',
+                manager: manager,
             });
             renditionRef.current = rendition;
 
@@ -130,56 +140,37 @@ export default function Reader() {
     }, [id, settings.viewMode]);
 
 
-    // Sync theme with global UI
+    // Sync theme with global UI (for bars etc)
     useEffect(() => {
-        const root = document.documentElement;
+        // Note: We might NOT want to override global .dark class here if it conflicts with ThemeProvider
+        // But for Reader View, usually we want the Chrome to match the Page.
+        // If theme is 'sepia' or 'custom', we need to decide what the UI looks like.
+        // For simplicity, let's keep the logic but be careful not to break the App settings when leaving.
+        // In a real app we might want 'Reader Mode' to be full screen without UI chrome.
 
-        // Handle dark class for standard themes
-        if (settings.theme === 'dark') {
-            root.classList.add('dark');
-        } else {
-            root.classList.remove('dark');
-        }
-
-        const applyColors = (bg: string, fg: string) => {
-            // Helper to convert hex to HSL for shadcn variables
-            // But simple overrides are often enough if we use standard bg/fg
-            root.style.setProperty('--background', bg);
-            root.style.setProperty('--foreground', fg);
-            root.style.setProperty('--card', bg);
-            root.style.setProperty('--popover', bg);
-            root.style.setProperty('--primary-foreground', fg);
-            root.style.setProperty('--secondary', bg);
-            root.style.setProperty('--muted', bg);
-        };
-
-        if (settings.theme === 'sepia') {
-            applyColors('#f4ecd8', '#5b4636');
-        } else if (settings.theme === 'custom' && settings.customColors) {
-            applyColors(settings.customColors.background, settings.customColors.foreground);
-        } else {
-            root.style.removeProperty('--background');
-            root.style.removeProperty('--foreground');
-            root.style.removeProperty('--card');
-            root.style.removeProperty('--popover');
-            root.style.removeProperty('--primary-foreground');
-            root.style.removeProperty('--secondary');
-            root.style.removeProperty('--muted');
-        }
-    }, [settings.theme, settings.customColors]);
+    }, [settings.theme]);
 
     // Apply Settings to Rendition
     useEffect(() => {
         if (renditionRef.current && isReady) {
             applySettings(renditionRef.current, settings);
         }
-    }, [settings.theme, settings.fontSize, settings.fontFamily, settings.customColors, isReady]);
+    }, [settings.theme, settings.fontSize, settings.fontFamily, settings.lineHeight, settings.customColors, isReady]);
 
     const applySettings = (rendition: Rendition, newSettings: ReaderSettings) => {
         const themes = {
-            light: { body: { color: '#000000', background: '#ffffff' } },
-            dark: { body: { color: '#cccccc', background: '#1a1a1a' } },
-            sepia: { body: { color: '#5b4636', background: '#f4ecd8' } },
+            light: {
+                body: { color: '#000000', background: '#ffffff' }
+            },
+            dark: {
+                body: { color: '#cccccc', background: '#1a1a1a' }
+            },
+            sepia: {
+                body: { color: '#5b4636', background: '#f4ecd8' }
+            },
+            oled: {
+                body: { color: '#a0a0a0', background: '#000000' }
+            },
             custom: {
                 body: {
                     color: newSettings.customColors?.foreground || '#cccccc',
@@ -196,6 +187,20 @@ export default function Reader() {
         rendition.themes.select(newSettings.theme);
         rendition.themes.fontSize(`${newSettings.fontSize}px`);
         rendition.themes.font(newSettings.fontFamily);
+
+        // Line Height logic
+        const lineHeightMap = {
+            compact: '1.2',
+            standard: '1.5',
+            loose: '1.8'
+        };
+        // We set this on paragraph globally for the rendition
+        rendition.themes.default({
+            p: {
+                "line-height": `${lineHeightMap[newSettings.lineHeight]} !important`,
+                "font-family": `${newSettings.fontFamily} !important`
+            }
+        });
     };
 
     return (
@@ -229,8 +234,6 @@ export default function Reader() {
 
             <Sheet open={showControls} onOpenChange={setShowControls}>
                 <ReaderControls
-                    settings={settings}
-                    onUpdateSettings={(s) => setSettings(prev => ({ ...prev, ...s }))}
                     onToggleTOC={() => {
                         setShowControls(false); // Close Settings
                         setShowTOC(true); // Open TOC
@@ -270,7 +273,13 @@ export default function Reader() {
                 ref={viewerRef}
                 id="viewer"
                 className="w-full h-full"
-                style={{ background: settings.theme === 'light' ? '#fff' : settings.theme === 'sepia' ? '#f4ecd8' : '#1a1a1a' }}
+                style={{
+                    background:
+                        settings.theme === 'light' ? '#fff' :
+                            settings.theme === 'sepia' ? '#f4ecd8' :
+                                settings.theme === 'oled' ? '#000000' :
+                                    '#1a1a1a'
+                }}
             ></div>
 
             {/* TTS Controls */}

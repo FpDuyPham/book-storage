@@ -5,7 +5,7 @@ interface Book {
     title: string;
     author: string;
     cover: string | null;
-    data: ArrayBuffer;
+    data?: ArrayBuffer;
     lastLocation: string | null;
     progress: number;
     addedAt: number;
@@ -34,6 +34,34 @@ db.version(2).stores({
         book.lastReadAt = undefined;
     });
 });
+
+// Migration helper
+import { storageService } from './storage';
+
+export async function migrateBooksToOPFS() {
+    const books = await db.books.toArray();
+    let migratedCount = 0;
+
+    for (const book of books) {
+        if (book.data) {
+            try {
+                // Save to OPFS
+                await storageService.saveBookData(book.id, book.data);
+
+                // Remove from Dexie (update record to have no data)
+                await db.books.update(book.id, { data: undefined });
+
+                migratedCount++;
+            } catch (error) {
+                console.error(`Failed to migrate book ${book.title} (${book.id})`, error);
+            }
+        }
+    }
+
+    if (migratedCount > 0) {
+        console.log(`Successfully migrated ${migratedCount} books to OPFS`);
+    }
+}
 
 export { db };
 export type { Book };
