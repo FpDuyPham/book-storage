@@ -33,9 +33,9 @@ export const storageService = {
                         worker.terminate();
                     };
 
-                    // Send data to worker
+                    // Send data to worker (only serializable data)
                     worker.postMessage({
-                        fileHandle,
+                        id,
                         arrayBuffer: data
                     });
                 });

@@ -1,9 +1,13 @@
 /// <reference lib="webworker" />
 
 self.onmessage = async (e: MessageEvent) => {
-    const { fileHandle, arrayBuffer } = e.data;
+    const { id, arrayBuffer } = e.data;
 
     try {
+        // Access OPFS directory directly from Worker
+        const root = await navigator.storage.getDirectory();
+        const fileHandle = await root.getFileHandle(`${id}.epub`, { create: true });
+
         // Create a synchronous access handle (Only available in Workers)
         const accessHandle = await fileHandle.createSyncAccessHandle();
 
