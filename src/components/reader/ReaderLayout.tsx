@@ -3,7 +3,8 @@ import { useReaderStore } from '@/hooks/useReaderStore';
 import { cn } from '@/lib/utils';
 import { ReaderHeader } from './ReaderHeader';
 import { ReaderFooter } from './ReaderFooter';
-import { Sheet, SheetContent } from '../ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '../ui/sheet';
+import { VisuallyHidden } from '../ui/visually-hidden';
 import { TableOfContents, Chapter } from '../TableOfContents';
 
 interface ReaderLayoutProps {
@@ -55,7 +56,10 @@ export function ReaderLayout({
                     showControls={showControls}
                     onToggleTOC={() => setTocOpen(true)}
                 />
-                <SheetContent side="left" className="w-[300px] sm:w-[400px] overflow-y-auto">
+                <SheetContent side="left" className="w-[300px] sm:w-[400px] p-0 border-none bg-transparent">
+                    <VisuallyHidden>
+                        <SheetTitle>Table of Contents</SheetTitle>
+                    </VisuallyHidden>
                     <TableOfContents
                         toc={toc}
                         currentChapterHref={currentChapter}

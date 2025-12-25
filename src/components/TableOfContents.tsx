@@ -2,7 +2,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { BookOpen, Search, Play, Check, AudioLines } from 'lucide-react';
 import {
-    SheetContent,
     SheetHeader,
     SheetTitle,
 } from "./ui/sheet"
@@ -90,7 +89,7 @@ export function TableOfContents({ toc, currentChapterHref, onSelectChapter }: Ta
 
 
     return (
-        <SheetContent side="left" className="w-[350px] sm:w-[500px] p-0 flex flex-col border-r-0 bg-transparent shadow-none">
+        <div className="h-full flex flex-col border-r-0 bg-transparent shadow-none">
             {/* Main Container - The "Glass" Card */}
             <div className="h-full w-full bg-background/80 backdrop-blur-md flex flex-col border-r">
 
@@ -196,6 +195,6 @@ export function TableOfContents({ toc, currentChapterHref, onSelectChapter }: Ta
                     </div>
                 </ScrollArea>
             </div>
-        </SheetContent>
+        </div>
     );
 }
