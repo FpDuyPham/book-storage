@@ -3,14 +3,11 @@ import { useParams, Link } from 'react-router-dom';
 import { db } from '../services/db';
 import { storageService } from '../services/storage';
 import ePub, { Book, Rendition } from 'epubjs';
-import { ArrowLeft, Settings as SettingsIcon } from 'lucide-react';
-import { ReaderControls } from '../components/ReaderControls';
-import { TableOfContents, Chapter } from '../components/TableOfContents';
+import { Chapter } from '../components/TableOfContents';
 import { TTSControlsPanel } from '../components/TTSControls';
-import { Sheet } from '../components/ui/sheet';
-import { Button } from '../components/ui/button';
 import { useTTS } from '../hooks/useTTS';
 import { useReaderStore, ReaderSettings } from '../hooks/useReaderStore';
+import { ReaderLayout } from '../components/reader/ReaderLayout';
 
 export default function Reader() {
     const { id } = useParams<{ id: string }>();
@@ -20,9 +17,9 @@ export default function Reader() {
 
     const [isReady, setIsReady] = useState(false);
     const [showControls, setShowControls] = useState(false);
-    const [showTOC, setShowTOC] = useState(false);
     const [toc, setToc] = useState<Chapter[]>([]);
     const [currentChapter, setCurrentChapter] = useState<string>('');
+    const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
 
     // Use Global Store
@@ -33,49 +30,31 @@ export default function Reader() {
 
     const initBook = async (dbBook: any, mode: 'scrolled' | 'paginated') => {
         try {
-            console.log('[Reader] Initializing book...', { bookId: dbBook.id, mode });
+            if (!viewerRef.current) return;
 
-            if (!viewerRef.current) {
-                console.error('[Reader] Viewer ref not available');
-                return;
-            }
-
-            // Cleanup previous rendition if exists
             if (renditionRef.current) {
-                console.log('[Reader] Cleaning up previous rendition');
                 renditionRef.current.destroy();
                 viewerRef.current.innerHTML = '';
             }
 
-            // Initialize ePub if fresh
             if (!bookRef.current) {
-                console.log('[Reader] Creating new ePub instance');
-
                 let bookData = dbBook.data;
                 if (!bookData) {
                     try {
-                        console.log('[Reader] Fetching book data from OPFS...');
                         bookData = await storageService.getBookData(dbBook.id);
                     } catch (err) {
-                        console.error('[Reader] Failed to load book data from storage:', err);
                         throw new Error('Book content not found.');
                     }
                 }
-
                 bookRef.current = ePub(bookData);
 
-                // Load navigation
-                console.log('[Reader] Loading navigation...');
                 const nav = await bookRef.current.loaded.navigation;
-                console.log('[Reader] Navigation loaded:', nav.toc);
                 setToc(nav.toc as Chapter[]);
             }
 
             const book = bookRef.current;
-
             let flow = mode === 'scrolled' ? 'scrolled-doc' : 'paginated';
             const manager = mode === 'scrolled' ? 'continuous' : 'default';
-            console.log('[Reader] Rendering with flow:', flow, 'manager:', manager);
 
             const rendition = book.renderTo(viewerRef.current, {
                 width: '100%',
@@ -85,24 +64,31 @@ export default function Reader() {
             });
             renditionRef.current = rendition;
 
-            // Display at saved location or start
-            console.log('[Reader] Displaying book at location:', dbBook.lastLocation || 'start');
-            const displayed = await rendition.display(dbBook.lastLocation || undefined);
-            console.log('[Reader] Book displayed successfully:', displayed);
+            await rendition.display(dbBook.lastLocation || undefined);
             setIsReady(true);
             setError(null);
 
             // Events
             rendition.on('relocated', (location: any) => {
-                console.log('[Reader] Relocated to:', location.start.cfi);
+                const percentage = location.start.percentage;
                 db.books.update(id!, {
                     lastLocation: location.start.cfi,
-                    progress: location.start.percentage * 100
+                    progress: percentage * 100
                 });
+                setProgress(percentage * 100);
                 setCurrentChapter(location.start.href);
+
+                // Estimate chapter index
+                // This is rough, ideally we map CFI to TOC item
             });
 
-            // Key Navigation (Only for Paginated)
+            // Tap Logic Integration for ePubJS
+            // ePubJS captures clicks in its iframe. We need to listen to them.
+            rendition.on('click', () => {
+                setShowControls(prev => !prev);
+            });
+
+            // Key Navigation
             const handleKey = (e: KeyboardEvent) => {
                 if (mode === 'scrolled') return;
                 if (e.key === 'ArrowLeft') rendition.prev();
@@ -114,41 +100,25 @@ export default function Reader() {
 
             applySettings(rendition, settings);
 
-            // Cleanup event listener on re-render
             return () => {
                 document.removeEventListener('keydown', handleKey);
             }
         } catch (err) {
-            console.error('[Reader] Error initializing book:', err);
+            console.error(err);
             setError(err instanceof Error ? err.message : 'Failed to load book');
             setIsReady(false);
         }
     };
 
-    // Initial Load & Mode Switch
     useEffect(() => {
         if (!id) return;
-
         const load = async () => {
             const dbBook = await db.books.get(id);
             if (!dbBook) return alert("Book not found");
-
             await initBook(dbBook, settings.viewMode);
         };
         load();
-
     }, [id, settings.viewMode]);
-
-
-    // Sync theme with global UI (for bars etc)
-    useEffect(() => {
-        // Note: We might NOT want to override global .dark class here if it conflicts with ThemeProvider
-        // But for Reader View, usually we want the Chrome to match the Page.
-        // If theme is 'sepia' or 'custom', we need to decide what the UI looks like.
-        // For simplicity, let's keep the logic but be careful not to break the App settings when leaving.
-        // In a real app we might want 'Reader Mode' to be full screen without UI chrome.
-
-    }, [settings.theme]);
 
     // Apply Settings to Rendition
     useEffect(() => {
@@ -159,18 +129,11 @@ export default function Reader() {
 
     const applySettings = (rendition: Rendition, newSettings: ReaderSettings) => {
         const themes = {
-            light: {
-                body: { color: '#000000', background: '#ffffff' }
-            },
-            dark: {
-                body: { color: '#cccccc', background: '#1a1a1a' }
-            },
-            sepia: {
-                body: { color: '#5b4636', background: '#f4ecd8' }
-            },
-            oled: {
-                body: { color: '#a0a0a0', background: '#000000' }
-            },
+            light: { body: { color: '#000000', background: 'transparent' } }, // Transparent to let Layout bg show? No, body in iframe needs color
+            // Actually, if we want the "Immersive" seamless look, the iframe body should match the container.
+            dark: { body: { color: '#cccccc', background: '#1a1a1a' } },
+            sepia: { body: { color: '#5b4636', background: '#F5E6D3' } },
+            oled: { body: { color: '#a0a0a0', background: '#000000' } },
             custom: {
                 body: {
                     color: newSettings.customColors?.foreground || '#cccccc',
@@ -179,7 +142,6 @@ export default function Reader() {
             }
         };
 
-        // Register all themes
         Object.entries(themes).forEach(([name, style]) => {
             rendition.themes.register(name, style);
         });
@@ -187,110 +149,66 @@ export default function Reader() {
         rendition.themes.select(newSettings.theme);
         rendition.themes.fontSize(`${newSettings.fontSize}px`);
         rendition.themes.font(newSettings.fontFamily);
-
-        // Line Height logic
-        const lineHeightMap = {
-            compact: '1.2',
-            standard: '1.5',
-            loose: '1.8'
-        };
-        // We set this on paragraph globally for the rendition
-        rendition.themes.default({
-            p: {
-                "line-height": `${lineHeightMap[newSettings.lineHeight]} !important`,
-                "font-family": `${newSettings.fontFamily} !important`
-            }
-        });
     };
 
-    return (
-        <div className="h-screen w-screen relative overflow-hidden bg-background transition-colors duration-300">
-            {/* Click Zones for Page Turning (Paginated Mode Only) */}
-            {settings.viewMode === 'paginated' && (
-                <>
-                    <div className="absolute top-0 left-0 w-1/6 h-full z-30 cursor-pointer" onClick={() => renditionRef.current?.prev()} title="Previous Page"></div>
-                    <div className="absolute top-0 right-0 w-1/6 h-full z-30 cursor-pointer" onClick={() => renditionRef.current?.next()} title="Next Page"></div>
-                </>
-            )}
+    const handleProgressChange = async (val: number) => {
+        if (!bookRef.current || !renditionRef.current) return;
+        // ePubJS conversion from percentage to cfi is complex.
+        // Simplified: use locations if generated, or just guessing.
+        // Ideally we generate locations on load: await book.locations.generate(1000);
+        // For now, let's skip strict progress seeking or implement if needed.
+        // cfiFromPercentage is available if locations are generated.
 
-            {/* Header / Nav */}
-            <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-start z-40 bg-gradient-to-b from-black/50 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                <div className="pointer-events-auto flex gap-2">
-                    <Link to="/">
-                        <Button variant="secondary" size="icon" className="rounded-full bg-black/50 hover:bg-black/80 text-white border-0 backdrop-blur">
-                            <ArrowLeft className="w-5 h-5" />
-                        </Button>
-                    </Link>
+        // This is a known expensive operation, maybe just skip for prototype
+        // or try:
+        // const cfi = book.locations.cfiFromPercentage(val / 100);
+        // renditionRef.current.display(cfi);
+
+        console.log("Seeking to", val);
+        // Need to generate locations first to be accurate
+    };
+
+    if (error) {
+        return (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 text-white">
+                <div className="text-center">
+                    <h2 className="text-2xl mb-4">Error</h2>
+                    <p>{error}</p>
+                    <Link to="/" className="mt-4 inline-block underline">Back to Library</Link>
                 </div>
-                <Button
-                    variant="secondary"
-                    size="icon"
-                    onClick={() => setShowControls(true)}
-                    className="pointer-events-auto rounded-full bg-black/50 hover:bg-black/80 text-white border-0 backdrop-blur"
-                >
-                    <SettingsIcon className="w-5 h-5" />
-                </Button>
             </div>
+        );
+    }
 
-            <Sheet open={showControls} onOpenChange={setShowControls}>
-                <ReaderControls
-                    onToggleTOC={() => {
-                        setShowControls(false); // Close Settings
-                        setShowTOC(true); // Open TOC
-                    }}
-                />
-            </Sheet>
-
-            <Sheet open={showTOC} onOpenChange={setShowTOC}>
-                <TableOfContents
-                    toc={toc}
-                    currentChapterHref={currentChapter}
-                    onSelectChapter={(href) => {
-                        renditionRef.current?.display(href);
-                        setShowTOC(false);
-                    }}
-                />
-            </Sheet>
-
-            {/* Error Display */}
-            {error && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
-                    <div className="text-center p-8 max-w-md">
-                        <div className="text-red-500 text-6xl mb-4">⚠️</div>
-                        <h2 className="text-2xl font-bold text-white mb-4">Failed to Load Book</h2>
-                        <p className="text-gray-300 mb-6">{error}</p>
-                        <Link to="/">
-                            <Button variant="secondary" size="lg">
-                                <ArrowLeft className="w-5 h-5 mr-2" />
-                                Back to Library
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-            )}
-
+    return (
+        <ReaderLayout
+            showControls={showControls}
+            setShowControls={setShowControls}
+            toc={toc}
+            currentChapter={currentChapter}
+            progress={progress}
+            totalChapters={toc.length}
+            currentChapterIndex={0} // TODO: Calculate index
+            onProgressChange={handleProgressChange}
+            onNavigate={(href) => renditionRef.current?.display(href)}
+        >
             <div
                 ref={viewerRef}
                 id="viewer"
                 className="w-full h-full"
-                style={{
-                    background:
-                        settings.theme === 'light' ? '#fff' :
-                            settings.theme === 'sepia' ? '#f4ecd8' :
-                                settings.theme === 'oled' ? '#000000' :
-                                    '#1a1a1a'
-                }}
-            ></div>
+            />
 
-            {/* TTS Controls */}
+            {/* TTS Integration */}
             {isReady && (
-                <TTSControlsPanel
-                    settings={tts.settings}
-                    state={tts.state}
-                    controls={tts.controls}
-                    availableVoices={tts.availableVoices}
-                />
+                <div className={`fixed bottom-20 right-4 z-50 transition-opacity ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                    <TTSControlsPanel
+                        settings={tts.settings}
+                        state={tts.state}
+                        controls={tts.controls}
+                        availableVoices={tts.availableVoices}
+                    />
+                </div>
             )}
-        </div>
+        </ReaderLayout>
     );
 }

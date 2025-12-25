@@ -6,9 +6,17 @@ import Reader from './pages/Reader';
 import { Toaster } from './components/ui/sonner';
 import { MainLayout } from './layouts/MainLayout';
 
+import { useThemeColor } from './hooks/useThemeColor';
+
+function ThemeWatcher() {
+    useThemeColor();
+    return null;
+}
+
 function App() {
     return (
         <Router>
+            <ThemeWatcher />
             <div className="w-full h-full bg-background text-foreground transition-colors duration-300">
                 <Routes>
                     <Route element={<MainLayout />}>
