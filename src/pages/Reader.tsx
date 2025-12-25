@@ -4,7 +4,7 @@ import { db } from '../services/db';
 import { storageService } from '../services/storage';
 import ePub, { Book, Rendition } from 'epubjs';
 import { Chapter } from '../components/TableOfContents';
-import { TTSControlsPanel } from '../components/TTSControls';
+import { MediaDock } from '../components/reader/MediaDock';
 import { useTTS } from '../hooks/useTTS';
 import { useReaderStore, ReaderSettings } from '../hooks/useReaderStore';
 import { useReadingTracker } from '../hooks/useReadingTracker';
@@ -63,6 +63,7 @@ export default function Reader() {
                 height: '100%',
                 flow: flow,
                 manager: manager,
+                allowScriptedContent: true, // Allow scripts to fix sandbox error
             });
             renditionRef.current = rendition;
 
@@ -102,6 +103,21 @@ export default function Reader() {
 
             applySettings(rendition, settings);
 
+            // Inject Custom Typography CSS
+            rendition.hooks.content.register((contents: any) => {
+                contents.addStylesheetRules({
+                    "body": {
+                        "text-align": "justify !important",
+                        "line-height": "1.8 !important", // Slightly tighter than 2 for better density
+                        "padding": "0 10px !important",
+                        "background-color": "transparent !important" // Force transparent
+                    },
+                    "p": {
+                        "margin-bottom": "1.5rem !important"
+                    }
+                });
+            });
+
             return () => {
                 document.removeEventListener('keydown', handleKey);
             }
@@ -114,12 +130,31 @@ export default function Reader() {
 
     useEffect(() => {
         if (!id) return;
+        let mounted = true;
+
         const load = async () => {
+            if (!mounted) return;
             const dbBook = await db.books.get(id);
             if (!dbBook) return alert("Book not found");
+
+            // Only init if not already ready or if settings changed significantly
+            // But here we rely on initBook to handle teardown
             await initBook(dbBook, settings.viewMode);
         };
         load();
+
+        return () => {
+            mounted = false;
+            // Optional: Destroy rendition on unmount to prevent leaks
+            if (renditionRef.current) {
+                renditionRef.current.destroy();
+                renditionRef.current = null;
+            }
+            if (bookRef.current) {
+                bookRef.current.destroy();
+                bookRef.current = null;
+            }
+        };
     }, [id, settings.viewMode]);
 
     // Apply Settings to Rendition
@@ -134,7 +169,7 @@ export default function Reader() {
             light: { body: { color: '#000000', background: 'transparent' } }, // Transparent to let Layout bg show? No, body in iframe needs color
             // Actually, if we want the "Immersive" seamless look, the iframe body should match the container.
             dark: { body: { color: '#cccccc', background: '#1a1a1a' } },
-            sepia: { body: { color: '#5b4636', background: '#F5E6D3' } },
+            sepia: { body: { color: '#5b4636', background: '#FAF4E8' } },
             oled: { body: { color: '#a0a0a0', background: '#000000' } },
             custom: {
                 body: {
@@ -193,6 +228,8 @@ export default function Reader() {
             currentChapterIndex={0} // TODO: Calculate index
             onProgressChange={handleProgressChange}
             onNavigate={(href) => renditionRef.current?.display(href)}
+            isPlaying={tts.state.isPlaying}
+            hideFooter={settings.showAudioPlayer}
         >
             <div
                 ref={viewerRef}
@@ -200,16 +237,20 @@ export default function Reader() {
                 className="w-full h-full"
             />
 
-            {/* TTS Integration */}
+            {/* Media Dock (Integrated Player) */}
             {isReady && (
-                <div className={`fixed bottom-20 right-4 z-50 transition-opacity ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                    <TTSControlsPanel
-                        settings={tts.settings}
-                        state={tts.state}
-                        controls={tts.controls}
-                        availableVoices={tts.availableVoices}
-                    />
-                </div>
+                <MediaDock
+                    settings={tts.settings}
+                    state={tts.state}
+                    controls={tts.controls}
+                    availableVoices={tts.availableVoices}
+                    show={settings.showAudioPlayer && showControls}
+                    chapterInfo={{
+                        title: currentChapter ? `Chapter ${toc.findIndex(c => c.href === currentChapter) + 1}` : 'Reading...',
+                        currentTime: '00:00', // TODO: Implement time tracking in useTTS
+                        totalTime: '00:00'
+                    }}
+                />
             )}
         </ReaderLayout>
     );

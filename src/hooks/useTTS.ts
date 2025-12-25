@@ -33,6 +33,7 @@ export function useTTS(rendition: Rendition | null) {
     const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
     const textQueueRef = useRef<string[]>([]);
     const currentIndexRef = useRef(0);
+    const highlightCfiRef = useRef<string | null>(null);
 
     // Load available voices
     useEffect(() => {
@@ -136,7 +137,7 @@ export function useTTS(rendition: Rendition | null) {
                 const nextUtterance = createUtterance(nextText);
                 utteranceRef.current = nextUtterance;
 
-                // Update progress
+                // Update progress & Highlight
                 const progress = Math.round((currentIndexRef.current / textQueueRef.current.length) * 100);
                 setState(prev => ({
                     ...prev,
@@ -145,6 +146,7 @@ export function useTTS(rendition: Rendition | null) {
                     totalChunks: textQueueRef.current.length
                 }));
 
+                highlightCurrentChunk();
                 window.speechSynthesis.speak(nextUtterance);
             } else {
                 // All done
@@ -181,6 +183,40 @@ export function useTTS(rendition: Rendition | null) {
         return utterance;
     }, [settings, availableVoices]);
 
+    // Highlight and Scroll logic
+    const highlightCurrentChunk = useCallback(async () => {
+        if (!rendition || !textQueueRef.current.length) return;
+
+        const currentText = textQueueRef.current[currentIndexRef.current];
+        if (!currentText) return;
+
+        try {
+            // Find the text in the rendition
+            const results = await (rendition.book as any).find(currentText.trim());
+            console.log(`[TTS] Find results for "${currentText.substring(0, 20)}":`, results);
+
+            // Remove previous highlight
+            if (highlightCfiRef.current) {
+                rendition.annotations.remove(highlightCfiRef.current, 'highlight');
+                highlightCfiRef.current = null;
+            }
+
+            if (results && results.length > 0) {
+                const cfi = results[0].cfi;
+                rendition.annotations.add('highlight', cfi, {}, (e: any) => {
+                    console.log("Highlight clicked", e);
+                }, 'tts-highlight', { fill: 'rgba(254, 240, 138, 0.5)' }); // Yellow-200/50 approx
+
+                highlightCfiRef.current = cfi;
+
+                // Sync: Auto scroll to this highlight
+                rendition.display(cfi);
+            }
+        } catch (error) {
+            console.error('[TTS] Error highlighting/scrolling:', error);
+        }
+    }, [rendition]);
+
     // Play
     const play = useCallback(() => {
         console.log('[TTS] Play requested');
@@ -203,8 +239,9 @@ export function useTTS(rendition: Rendition | null) {
         utteranceRef.current = utterance;
 
         setState(prev => ({ ...prev, currentText: text, progress: 0 }));
+        highlightCurrentChunk();
         window.speechSynthesis.speak(utterance);
-    }, [extractPageText, createUtterance]);
+    }, [extractPageText, createUtterance, highlightCurrentChunk]);
 
     // Play from selected text
     const playFromSelection = useCallback(() => {
@@ -260,9 +297,11 @@ export function useTTS(rendition: Rendition | null) {
     // Stop
     const stop = useCallback(() => {
         console.log('[TTS] Stop requested');
-        window.speechSynthesis.cancel();
-        textQueueRef.current = [];
-        currentIndexRef.current = 0;
+        if (highlightCfiRef.current) {
+            rendition?.annotations.remove(highlightCfiRef.current, 'highlight');
+            highlightCfiRef.current = null;
+        }
+
         setState({
             isPlaying: false,
             isPaused: false,
@@ -272,7 +311,7 @@ export function useTTS(rendition: Rendition | null) {
             currentChunk: 0,
             totalChunks: 0
         });
-    }, []);
+    }, [rendition]);
 
     // Update settings
     const updateSettings = useCallback((newSettings: Partial<TTSSettings>) => {

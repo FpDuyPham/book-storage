@@ -18,6 +18,8 @@ interface ReaderLayoutProps {
     currentChapterIndex?: number;
     onProgressChange: (val: number) => void;
     onNavigate: (href: string) => void;
+    isPlaying?: boolean;
+    hideFooter?: boolean;
 }
 
 export function ReaderLayout({
@@ -31,6 +33,8 @@ export function ReaderLayout({
     currentChapterIndex,
     onProgressChange,
     onNavigate,
+    isPlaying = false,
+    hideFooter = false
 }: ReaderLayoutProps) {
     const { theme } = useReaderStore();
     const [tocOpen, setTocOpen] = useState(false);
@@ -38,7 +42,7 @@ export function ReaderLayout({
     // Theme Styles
     const themeStyles = {
         light: "bg-white text-black",
-        sepia: "bg-[#F5E6D3] text-[#433422]",
+        sepia: "bg-[#FAF4E8] text-[#5b4636]",
         dark: "bg-[#333333] text-[#DADADA]",
         oled: "bg-black text-gray-400",
         custom: "bg-background text-foreground"
@@ -50,6 +54,7 @@ export function ReaderLayout({
                 "h-screen w-screen relative overflow-hidden transition-colors duration-300 selection:bg-primary/30",
                 themeStyles[theme] || themeStyles.light
             )}
+            onClick={() => setShowControls(!showControls)}
         >
             <Sheet open={tocOpen} onOpenChange={setTocOpen}>
                 <ReaderHeader
@@ -72,48 +77,39 @@ export function ReaderLayout({
                 </SheetContent>
             </Sheet>
 
-            {/* Click Overlay (Center 30%) - Interactions */}
-            <div
-                className="absolute inset-0 z-10 pointer-events-none"
-            >
-                <div className="flex h-full w-full">
-                    {/* Left/Right allow clicks to pass through to epub (for page turns if implemented there) */}
-                    <div className="w-[35%] h-full pointer-events-none" />
-
-                    {/* Center captures clicks for menu */}
-                    <div
-                        className="w-[30%] h-full pointer-events-auto cursor-pointer"
-                        onClick={() => setShowControls(!showControls)}
-                        title="Toggle Controls"
-                    />
-
-                    <div className="w-[35%] h-full pointer-events-none" />
-                </div>
-            </div>
+            {/* Click Overlay Removed - Using Global Click Handler */}
 
             {/* Content Container */}
-            <div className="h-full w-full flex flex-col justify-center items-center">
+            <div className="h-full w-full flex flex-col justify-center items-center pb-24 sm:pb-32">
                 <div className={cn(
                     "flex-1 w-full relative",
-                    "transition-all duration-300 ease-in-out",
-                    // Desktop Centered View
-                    "xl:max-w-3xl xl:mx-auto",
-                    "xl:py-8 xl:px-12",
-                    // On desktop we might want to show paper edges in some themes?
-                    // For now just keep it clean.
+                    "transition-all duration-500 ease-in-out", // Smooth transition
+                    "pt-24 pb-12 px-4 sm:px-12", // Mobile optimized padding
+                    "leading-loose", // Increased leading
+
+                    // Smart Layout Switching
+                    // If Playing: Single Column Focused (Karaoke Mode)
+                    // If Not Playing: Standard Book Layout (Two Columns on Desktop if Sepia/Standard)
+                    isPlaying
+                        ? "max-w-2xl mx-auto"
+                        : "max-w-screen-lg mx-auto",
+
+                    "text-justify"
                 )}>
                     {children}
                 </div>
             </div>
 
-            <ReaderFooter
-                showControls={showControls}
-                currentChapter={currentChapter}
-                progress={progress}
-                totalChapters={totalChapters}
-                currentChapterIndex={currentChapterIndex}
-                onProgressChange={onProgressChange}
-            />
+            {!hideFooter && (
+                <ReaderFooter
+                    showControls={showControls}
+                    currentChapter={currentChapter}
+                    progress={progress}
+                    totalChapters={totalChapters}
+                    currentChapterIndex={currentChapterIndex}
+                    onProgressChange={onProgressChange}
+                />
+            )}
         </div>
     );
 }

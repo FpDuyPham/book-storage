@@ -1,4 +1,4 @@
-import { Type, Check } from 'lucide-react';
+import { Type, Check, Headphones } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Slider } from '../ui/slider';
@@ -10,7 +10,8 @@ export function ReaderSettings() {
     const {
         theme, setTheme,
         fontSize, setFontSize,
-        fontFamily, setFontFamily
+        fontFamily, setFontFamily,
+        showAudioPlayer, setShowAudioPlayer
     } = useReaderStore();
 
     // Prevent hydration mismatch
@@ -41,6 +42,23 @@ export function ReaderSettings() {
             </PopoverTrigger>
             <PopoverContent className="w-80 p-5 bg-background/95 backdrop-blur-xl border-border/50 shadow-2xl rounded-xl" align="end" sideOffset={12}>
                 <div className="space-y-6">
+                    {/* Audio Toggle */}
+                    <div className="flex items-center justify-between px-2">
+                        <div className="flex items-center gap-2">
+                            <Headphones className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm font-medium">Audio Player</span>
+                        </div>
+                        <Button
+                            variant={showAudioPlayer ? "default" : "outline"}
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setShowAudioPlayer(!showAudioPlayer)}
+                        >
+                            {showAudioPlayer ? "On" : "Off"}
+                        </Button>
+                    </div>
+
+                    <div className="h-px bg-border/50 mx-2" />
                     {/* Brightness (Stub) */}
                     {/* <div className="flex items-center gap-3 text-muted-foreground">
                         <Sun className="h-4 w-4" />

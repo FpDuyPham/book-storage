@@ -10,6 +10,7 @@ export interface ReaderSettings {
     autoScrollSpeed: number;
     isAutoScrolling: boolean;
     viewMode: 'scrolled' | 'paginated';
+    showAudioPlayer: boolean;
     customColors?: {
         background: string;
         foreground: string;
@@ -25,6 +26,7 @@ interface ReaderState extends ReaderSettings {
     setIsAutoScrolling: (isScrolling: boolean) => void;
     setViewMode: (mode: ReaderSettings['viewMode']) => void;
     setCustomColors: (colors: ReaderSettings['customColors']) => void;
+    setShowAudioPlayer: (show: boolean) => void;
     updateSettings: (settings: Partial<ReaderSettings>) => void;
 }
 
@@ -42,6 +44,7 @@ export const useReaderStore = create<ReaderState>()(
                 background: '#1a1a1a',
                 foreground: '#cccccc'
             },
+            showAudioPlayer: true,
 
             setTheme: (theme) => set({ theme }),
             setFontSize: (fontSize) => set({ fontSize }),
@@ -51,6 +54,7 @@ export const useReaderStore = create<ReaderState>()(
             setIsAutoScrolling: (isAutoScrolling) => set({ isAutoScrolling }),
             setViewMode: (viewMode) => set({ viewMode }),
             setCustomColors: (customColors) => set({ customColors }),
+            setShowAudioPlayer: (showAudioPlayer) => set({ showAudioPlayer }),
             updateSettings: (newSettings) => set((state) => ({ ...state, ...newSettings })),
         }),
         {

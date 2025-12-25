@@ -28,7 +28,7 @@ export function ReaderFooter({
                 showControls ? "translate-y-0" : "translate-y-full",
                 // Theme Adaptability
                 theme === 'light' ? "bg-white/90 border-gray-200 text-gray-800" :
-                    theme === 'sepia' ? "bg-[#F5E6D3]/90 border-[#E8D4B9] text-[#5b4636]" :
+                    theme === 'sepia' ? "bg-[#FAF4E8]/95 border-[#E6DBB2] text-[#5b4636]" : // Match ReaderBG
                         theme === 'dark' ? "bg-[#333]/90 border-[#444] text-[#DADADA]" :
                             "bg-black/90 border-gray-800 text-gray-400",
                 "backdrop-blur-md"
