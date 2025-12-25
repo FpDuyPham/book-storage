@@ -7,10 +7,12 @@ import { Chapter } from '../components/TableOfContents';
 import { TTSControlsPanel } from '../components/TTSControls';
 import { useTTS } from '../hooks/useTTS';
 import { useReaderStore, ReaderSettings } from '../hooks/useReaderStore';
+import { useReadingTracker } from '../hooks/useReadingTracker';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
 
 export default function Reader() {
     const { id } = useParams<{ id: string }>();
+    useReadingTracker(id || null); // Start tracking
     const viewerRef = useRef<HTMLDivElement>(null);
     const bookRef = useRef<Book | null>(null);
     const renditionRef = useRef<Rendition | null>(null);

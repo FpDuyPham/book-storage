@@ -1,88 +1,106 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Home, Heart, Clock, Settings, ChevronLeft, ChevronRight, Book } from 'lucide-react';
+import React from 'react';
+import { LayoutDashboard, BookOpen, Settings, LogOut, CreditCard, User } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
+import {
+    Avatar,
+    AvatarFallback,
+    AvatarImage,
+} from "./ui/avatar"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "./ui/dropdown-menu"
 
 interface SidebarProps {
     className?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ className }) => {
-    const [isCollapsed, setIsCollapsed] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
 
     const navItems = [
-        { icon: Home, label: 'Home', path: '/' },
-        { icon: Heart, label: 'Favorites', path: '/favorites' },
-        { icon: Clock, label: 'History', path: '/history' },
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+        { icon: BookOpen, label: 'My Library', path: '/library' },
         { icon: Settings, label: 'Settings', path: '/settings' },
     ];
 
     return (
-        <motion.div
-            initial={{ width: 240 }}
-            animate={{ width: isCollapsed ? 80 : 240 }}
-            className={cn(
-                "h-screen bg-card border-r border-border flex flex-col relative z-20 transition-all duration-300",
-                className
-            )}
-        >
-            {/* Header */}
-            <div className="p-6 flex items-center gap-3 overflow-hidden whitespace-nowrap">
-                <div className="min-w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                    <Book size={20} />
-                </div>
-                {!isCollapsed && (
-                    <motion.span
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="font-bold text-lg tracking-tight"
-                    >
-                        StoryReader
-                    </motion.span>
-                )}
+        <div className={cn(
+            "w-64 h-full flex flex-col border-r border-border bg-background/80 backdrop-blur-xl",
+            className
+        )}>
+            {/* Logo Section */}
+            <div className="h-14 flex items-center px-6 border-b border-border/40">
+                <span className="font-bold text-lg tracking-tight flex items-center gap-2">
+                    <span className="w-6 h-6 rounded bg-primary text-primary-foreground flex items-center justify-center text-xs">SR</span>
+                    StoryReader
+                </span>
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 px-4 space-y-2 py-4">
+            <div className="flex-1 py-6 px-3 space-y-1">
                 {navItems.map((item) => {
                     const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
                     return (
                         <Button
                             key={item.path}
-                            variant={isActive ? "secondary" : "ghost"}
+                            variant="ghost"
                             className={cn(
-                                "w-full justify-start gap-3 h-12 mb-1",
-                                isCollapsed ? "px-2 justify-center" : "px-4"
+                                "w-full justify-start gap-3 h-10 px-3 font-medium transition-all duration-200",
+                                isActive
+                                    ? "bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 hover:text-blue-700"
+                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                             )}
                             onClick={() => navigate(item.path)}
                         >
-                            <item.icon size={20} className={cn(isActive ? "text-primary" : "text-muted-foreground")} />
-                            {!isCollapsed && (
-                                <span className={cn("text-base", isActive && "font-medium")}>
-                                    {item.label}
-                                </span>
-                            )}
+                            <item.icon size={18} />
+                            <span className="text-sm">{item.label}</span>
                         </Button>
                     );
                 })}
-            </nav>
-
-            {/* Collapse Toggle */}
-            <div className="p-4 border-t border-border">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsCollapsed(!isCollapsed)}
-                    className="w-full h-10 flex items-center justify-center hover:bg-muted"
-                >
-                    {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-                </Button>
             </div>
-        </motion.div>
+
+            {/* User Profile Section */}
+            <div className="p-4 border-t border-border mt-auto">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="w-full h-auto p-2 flex items-center gap-3 hover:bg-accent/50 rounded-xl justify-start">
+                            <Avatar className="h-9 w-9 border border-border">
+                                <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
+                                <AvatarFallback>CN</AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col items-start overflow-hidden">
+                                <span className="text-sm font-semibold truncate w-full text-left">User Name</span>
+                                <span className="text-xs text-muted-foreground truncate w-full text-left">Free Plan</span>
+                            </div>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 mb-2">
+                        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem>
+                            <User className="mr-2 h-4 w-4" />
+                            <span>Profile</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            <span>Billing</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50">
+                            <LogOut className="mr-2 h-4 w-4" />
+                            <span>Log out</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        </div>
     );
 };
